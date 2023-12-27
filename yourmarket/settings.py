@@ -21,6 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure--xtlu7#wwbsrlmi6a0d7**6@apze!)=v$97m$m976d)8$i@i2g'
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Use console backend for development
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -37,7 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'data'
+    'rest_framework',
+    'customer'
 ]
 
 MIDDLEWARE = [
@@ -76,22 +78,39 @@ WSGI_APPLICATION = 'yourmarket.wsgi.application'
 
 DATABASES = {
     'default': {
-
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'yourmarket',
-
         'USER': 'postgres',
-
         'PASSWORD': 'Kavtech@123',
-
         'HOST': 'localhost',
-
         'PORT': '5433',
 
     }
 }
 
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        # Add other renderers as needed
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        # Add other parsers as needed
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+        # Add other permission classes as needed
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+        # Add other authentication classes as needed
+    ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        # Add other filter backends as needed
+    ],
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -131,5 +150,15 @@ STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+DEFAULT_FROM_EMAIL = 'sanaakram582@gmail.com'  # Default sender for emails
+SERVER_EMAIL = 'sanaakram582@gmail.com'  # The email address that error messages are sent to
+EMAIL_SUBJECT_PREFIX = 'Your Market Scrapper'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587  # Use the appropriate port for your SMTP server
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = 'sanaakram582@gmail.com'
+EMAIL_HOST_PASSWORD = 'arby dpsv jbrd lypr'
+# EMAIL_HOST_PASSWORD = 'ALHAMDULILLAH786@'
