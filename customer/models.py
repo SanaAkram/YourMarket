@@ -48,3 +48,15 @@ class Customer_Details(models.Model):
 
     def __str__(self):
         return str(self.pk)
+
+
+class Email(models.Model):
+    email_id = models.AutoField(primary_key=True)
+    sender = models.EmailField()
+    recipient = models.EmailField()
+    subject = models.CharField(max_length=255)
+    body = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.subject} - {self.sender}"

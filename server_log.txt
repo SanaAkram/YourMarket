@@ -1,0 +1,25 @@
+C:\Program Files\JetBrains\PyCharm 2021.1.1\plugins\python\helpers\pydev\pydevd.py:1844: DeprecationWarning: currentThread() is deprecated, use current_thread() instead
+  dummy_thread = threading.currentThread()
+C:\Program Files\JetBrains\PyCharm 2021.1.1\plugins\python\helpers\pydev\pydevd.py:1844: DeprecationWarning: currentThread() is deprecated, use current_thread() instead
+  dummy_thread = threading.currentThread()
+Watching for file changes with StatReloader
+Performing system checks...
+
+System check identified no issues (0 silenced).
+January 03, 2024 - 19:07:30
+Django version 5.0, using settings 'yourmarket.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+D:\Your Market - Scrapper\yourmarket\urls.py changed, reloading.
+C:\Program Files\JetBrains\PyCharm 2021.1.1\plugins\python\helpers\pydev\pydevd.py:1844: DeprecationWarning: currentThread() is deprecated, use current_thread() instead
+  dummy_thread = threading.currentThread()
+Watching for file changes with StatReloader
+Performing system checks...
+
+System check identified no issues (0 silenced).
+January 03, 2024 - 19:15:36
+Django version 5.0, using settings 'yourmarket.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
