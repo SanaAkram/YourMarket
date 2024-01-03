@@ -26,7 +26,12 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Use console 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '127.0.0.1:8000/',
+    '127.0.0.1/',
+    '127.0.0.1',
+    'localhost',
+]
 
 
 # Application definition
@@ -150,8 +155,8 @@ STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-DEFAULT_FROM_EMAIL = 'sanaakram582@gmail.com'  # Default sender for emails
-SERVER_EMAIL = 'sanaakram582@gmail.com'  # The email address that error messages are sent to
+DEFAULT_FROM_EMAIL = 'yourmarket786@gmail.com'  # Default sender for emails
+SERVER_EMAIL = 'yourmarket786@gmail.com'  # The email address that error messages are sent to
 EMAIL_SUBJECT_PREFIX = 'Your Market Scrapper'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -159,6 +164,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587  # Use the appropriate port for your SMTP server
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
-EMAIL_HOST_USER = 'sanaakram582@gmail.com'
-EMAIL_HOST_PASSWORD = 'arby dpsv jbrd lypr'
+EMAIL_HOST_USER = 'yourmarket786@gmail.com'
+EMAIL_HOST_PASSWORD = 'uvap xuzz qxyc vpqo'
+EMAIL_TO = 'muhammadmubeen384@gmail.com'
 # EMAIL_HOST_PASSWORD = 'ALHAMDULILLAH786@'

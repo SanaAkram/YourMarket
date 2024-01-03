@@ -1,30 +1,23 @@
 from datetime import datetime
-# from .serializers import CustomerSerializer
-from .models import Customer_Details, Product_details
+from .models import Customer_Details, Product_details, PaymentDetails, Email
 import requests
 import json
-from django.db.models import CharField
-from yourmarket.authenticate_code import auth_check
-from django.db.models import F
-from django.core.mail import send_mail, EmailMessage
-from email.mime.base import MIMEBase
-from email import encoders
-import pandas as pd
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework import status
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from tabulate import tabulate
-import smtplib
+from .constants import products
+from .functions import send_email, create_qsr_report_body, create_email_body
+from yourmarket.settings import EMAIL_TO, EMAIL_HOST_USER
 
 
 class Customer_DataAPIView(APIView):
     permission_classes = (AllowAny,)
 
-    def get(self, request, start_date, end_date, month):
+    def get(self, request, start_date=None, end_date=None, month=None):
+        if '<str:' in start_date:
+            return Response(data='', status=status.HTTP_200_OK)
         # auth_check(self)
         api_key = "1CFE6FD1F558C7B412B63A7FA8A2F"
         headers = {
@@ -41,6 +34,7 @@ class Customer_DataAPIView(APIView):
         payment_report_url = "paymentinstrumentreport"
         customer_address_url = "https://cpapp.azurewebsites.net/CustomerPortalAPI/api/booking/GetCustomerInfo?phoneno="
         customer_phone_url = "ConsigneeProfileReport"
+        customer_details_url = "https://cpapp.azurewebsites.net/CustomerPortalAPI/api/Reports/CnDetails?cn="
 
         c_data = {
             "isMonthWise": False,
@@ -105,6 +99,55 @@ class Customer_DataAPIView(APIView):
         def create_url(base_url, endpoint):
             return f"{base_url}{endpoint}"
 
+        def set_payment_id(payment_id):
+            payment_obj = PaymentDetails.objects.filter(payment_id=payment_id).first()
+            # print(f'Consignment number {consignment_no} has Payment Id {payment_obj}')
+            if payment_obj:
+                return payment_obj
+            else:
+                return None
+
+        def get_product_fk(product_description):
+            product_obj = Product_details.objects.filter(product_name=product_description).first()
+            return product_obj
+
+        def process_string(input_string):
+            cleaned_string = ''.join(char for char in input_string if not char.isdigit())
+            cleaned_string = cleaned_string.replace(' ', '_').lstrip('_')
+            cleaned_string = cleaned_string.lower()
+            if 'single' in cleaned_string or 'singal' in cleaned_string:
+                if 'shoe' in cleaned_string:
+                    cleaned_string = 'Single Shoe Rack'
+                else:
+                    cleaned_string = 'Single Pin Garment Hanger Stand'
+            elif 'double' in cleaned_string:
+                if 'shoe' in cleaned_string:
+                    cleaned_string = 'Double Shoe Rack'
+                elif 'straight' in cleaned_string:
+                    cleaned_string = 'Double Straight'
+                else:
+                    cleaned_string = 'Double Pin Garment Hanger Stand'
+            elif 'straight' in cleaned_string and 'double' not in cleaned_string:
+                cleaned_string = 'Straight'
+            return cleaned_string
+
+        def db_entry(all_data, db_table):
+            try:
+                for data in all_data:
+                    customer, created = db_table.objects.update_or_create(
+                        payment_id=data['payment_id'],
+                        defaults=data
+                    )
+                    if not created:
+                        # Existing customer was updated
+                        print(f" Payments with updated.")
+                    else:
+                        # New customer was created
+                        print(f"New Entry of Payments with created.")
+
+            except Exception as e:
+                print(f"Error updating/creating customers: {str(e)}")
+
         def fetch_data(start_date, end_date, month):
             customer_summary_endpoint = create_url(BASE_URL, customer_summary_detail_report_url)
             customer_summary_data = get_api_response(customer_summary_endpoint, c_data)
@@ -116,9 +159,30 @@ class Customer_DataAPIView(APIView):
             qsr_endpoint = create_url(BASE_URL, qsr_report_url)
             qsr_data = get_api_response(qsr_endpoint, get_qsr_payload(start_date, end_date, month))
 
-            customer_phone_url_endpoint = create_url(BASE_URL, customer_phone_url)
-            number_details = get_api_response(customer_phone_url_endpoint,
-                                              get_customer_number_payload(start_date, end_date))
+            if not qsr_data:
+                body = f'QSR Report cannot be generated as there are no records between {start_date} to {end_date}'
+                send_email(email_body=body, subject='QSR Report Generation Failed')
+            payment_endpoint = create_url(BASE_URL, payment_report_url)
+            payment_data = get_api_response(payment_endpoint, get_qsr_payload(start_date, end_date, month))
+            payments = []
+            for payment in payment_data:
+                p_data = {
+                    "payment_id": payment['PaymentID'],
+                    "paid_on": payment['PaidOn'],
+                    'rr_amount': payment['RRAmount'],
+                    'invoice_amount': payment['InvoiceAmount'],
+                    'ibft_fee': payment['IBFTFee'],
+                    'net_payable': payment['NetPayable'],
+                    'instrument_mode': payment['InstrumentMode'],
+                    'instrument_number': payment['InstrumentNumber'],
+                }
+
+                payments.append(p_data)
+            db_entry(payments, PaymentDetails)
+
+            # customer_phone_url_endpoint = create_url(BASE_URL, customer_phone_url)
+            # number_details = get_api_response(customer_phone_url_endpoint,
+            #                                   get_customer_number_payload(start_date, end_date))
 
             all_data = []
 
@@ -128,18 +192,29 @@ class Customer_DataAPIView(APIView):
                                '')
                 number = next(
                     (bsd['consigneePhoneNo'] for bsd in booking_summary_data if bsd['cn'] == consignment_no), '')
-                if number == '':
-                    number = next(
-                        (num['contact'] for num in number_details if
-                         num['detail'][0]['consignmentNumber'] == consignment_no),
-                        '')
-                if address == '' and number:
-                    customer_info = get_api_GET_response(customer_address_url + number)
-                    if customer_info:
-                        address = customer_info['address']
+                if address == '' or number == '':
+                    customer_details_endpoint = customer_details_url + consignment_no
+                    c_details = get_api_response(customer_details_endpoint, '')
+                    if c_details:
+                        address = c_details[0]['ConsigneeAddress']
+                        number = c_details[0]['ConsigneeCell']
+                # if number == '':
+                #     number = next(
+                #         (num['contact'] for num in number_details if
+                #          num['detail'][0]['consignmentNumber'] == consignment_no),
+                #         '')
+                # if address == '' and number:
+                #     customer_info = get_api_GET_response(customer_address_url + number)
+                #     if customer_info:
+                #         address = customer_info['address']
+
                 qsr_item = next((q for q in qsr_data if q['consignmentNumber'] == consignment_no), {})
                 status = qsr_item.get('RRStatus', '')
-                payment_id = qsr_item.get('paymentId', '')
+                p_id = qsr_item.get('paymentId', '')
+                if p_id:
+                    payment_id = set_payment_id(p_id)
+                else:
+                    payment_id = None
                 total_amount = int(qsr_item.get('totalAmount', 0))
                 gst = int(qsr_item.get('GST', 0))
                 charges = total_amount + gst
@@ -148,6 +223,8 @@ class Customer_DataAPIView(APIView):
                 parsed_date = datetime.strptime(delivery_date, '%d %b %Y').strftime('%Y-%m-%d')
                 booking_date = datetime.strptime(csd['BookingDate'], '%Y-%m-%dT%H:%M:%S')
                 bookking_date = booking_date.date()
+                product_detail = process_string(csd['productDescription'])
+                product_fk = get_product_fk(product_detail)
 
                 data = {
                     "consignment_no": consignment_no,
@@ -163,17 +240,29 @@ class Customer_DataAPIView(APIView):
                     'delivery_date': parsed_date,
                     'total_charges': charges,
                     'attempts': attempts,
-                    'product_description': csd['productDescription'],
-                    'payment_fk': payment_id
+                    'product_description': product_detail,
+                    'payment_fk': payment_id,
+                    'product_fk': product_fk
                 }
                 all_data.append(data)
 
             return all_data
 
         all_data = fetch_data(start_date, end_date, month)
+        email_body = create_email_body(all_data)
+        subject = f'Shipment Update - Summary Report for Date {start_date} and {end_date}'
+        existing_email, created = Email.objects.update_or_create(
+            subject=subject,
+            defaults={'body': email_body, 'sender': EMAIL_HOST_USER, 'recipient': EMAIL_TO}
+        )
 
+        if created:
+            send_email(email_body, subject)
+            print(f"Email sent with subject '{subject}' and added to the Email model.")
+        else:
+            print(f"Email with subject '{subject}' already exists. Skipping.")
         try:
-            for data in all_data:
+            for index, data in enumerate(all_data):
                 consignment_no = data['consignment_no']
 
                 customer, created = Customer_Details.objects.update_or_create(
@@ -183,10 +272,11 @@ class Customer_DataAPIView(APIView):
 
                 if not created:
                     # Existing customer was updated
-                    print(f"Customer with consignment_no {consignment_no} updated.")
+                    print(f"Customer with consignment_no {consignment_no} updated. with Index {index}")
                 else:
                     # New customer was created
-                    print(f"New customer with consignment_no {consignment_no} created.")
+                    print(f"New customer with consignment_no {consignment_no} created with Index {index}")
+
             return Response({"data": f"{all_data}"}, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -216,11 +306,6 @@ class QSR_View(APIView):
         ads = int(kwargs.get('ads'))
         dc = int(kwargs.get('dc'))
 
-        products = [
-            'Double Shoe Rack', 'Single Shoe Rack', 'Double Pin Garment Hanger Stand',
-            'Double Straight', 'Single Pin Garment Hanger Stand', 'Single Straight'
-        ]
-
         total_items_sold = 0
         total_wholesale_value = 0
         total_sale_value = 0
@@ -235,8 +320,6 @@ class QSR_View(APIView):
             total_items_sold += item_count
             total_wholesale_value += product_wholesale_value
             total_sale_value += product_sale_price
-
-            # Save product details for later use
             product_data[product] = {
                 'item_sold': item_count,
                 'total_wholesale_value': product_wholesale_value,
@@ -245,7 +328,7 @@ class QSR_View(APIView):
 
             all_data.append(product_data)
 
-        total = { 'QSR Report' : {
+        total = {'QSR Report': {
             'total_items_sold': total_items_sold,
             'total_wholesale_value': total_wholesale_value,
             'total_sale_value': total_sale_value,
@@ -256,68 +339,7 @@ class QSR_View(APIView):
         }}
         all_data.append(total)
 
-        email_user = 'sanaakram582@gmail.com'
-        email_password = 'arby dpsv jbrd lypr'
-
-        # Recipient email address
-        email_send = 'muhammadmubeen384@gmail.com'
-
-        # Email subject and body
-        subject = 'QSR report by Your Market'
-        body = 'Please find the Report below:'
-        subject = 'QSR Report by Your Market'
-        body = (
-            "Dear recipient,\n\n"
-            "Here is the QSR report of Your Market:\n\n"
-        )
-
-        for item in all_data:
-            for product, details in item.items():
-                body += f"{product}:\n"
-                for key, value in details.items():
-                    body += f"  {key}: {value}\n"
-                body += "\n"
-
-        body += (
-            "\nThank you for using Your Market services. If you have any questions, "
-            "please feel free to contact us.\n\nBest regards,\nYour Market Team"
-        )
-
-        msg = MIMEMultipart()
-        msg['From'] = email_user
-        msg['To'] = email_send
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-
-        try:
-            with smtplib.SMTP('smtp.gmail.com', 587) as server:
-                server.starttls()
-                server.login(email_user, email_password)
-                server.sendmail(email_user, email_send, msg.as_string())
-            print('Email sent successfully.')
-
-        except Exception as e:
-            print('Error:', str(e))
+        email_body = create_qsr_report_body(all_data)
+        send_email(email_body, subject='QSR Report by Your Market')
 
         return Response(data=all_data, status=status.HTTP_200_OK)
-
-
-        # auth_check(self)
-
-        # customer_details_queryset = Customer_Details.objects.filter(customer_id__isnull=False)
-        # customer_details_list = list(customer_details_queryset)
-        # product_mapping = {}
-        # for cm in customer_details_list:
-        #     product_mapping[cm.product_description] = None
-        #
-        # matching_products = Product_details.objects.filter(product_name__in=product_mapping.keys())
-        #
-        # for matching_product in matching_products:
-        #     product_mapping[matching_product.product_name] = matching_product
-        #
-        # for cm in customer_details_list:
-        #     matching_product = product_mapping[cm.product_description]
-        #     if matching_product:
-        #         cm.product_fk_id = matching_product
-        #         cm.save()
-
